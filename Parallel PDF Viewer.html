@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parallel PDF Viewer with Sync Scroll</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            position: relative;
+        }
+        
+        .pdf-container {
+            flex: 1;
+            height: 100%;
+            overflow: auto;
+            position: relative;
+            border-right: 1px solid #ccc;
+        }
+        
+        .pdf-viewer {
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .pdf-page {
+            display: block;
+            margin: 0 auto 20px auto;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+            max-width: 95%;
+            height: auto;
+        }
+        
+        .controls {
+            transition: all 0.3s ease;
+	    position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 90%;
+        }
+	.controls.minimized {
+    	    height: 40px;
+    	    overflow: hidden;
+	}
+
+
+	.page-input {
+    	    width: 40px;
+    	    text-align: center;
+    	    border: 1px solid #ccc;
+    	    border-radius: 3px;
+    	    padding: 2px;
+    	    font-size: 14px;
+	}
+
+	.page-input:focus {
+    	    outline: 2px solid #4CAF50;
+    	    border-color: #4CAF50;
+	}
+
+
+
+
+	.minimize-btn {
+    	    position: absolute;
+    	    top: -20px;
+    	    left: 50%;
+    	    transform: translateX(-50%);
+    	    width: 40px;
+    	    height: 20px;
+    	    background: #4CAF50;
+    	    border: none;
+    	    border-radius: 5px 5px 0 0;
+    	    color: white;
+    	    cursor: pointer;
+    	    display: flex;
+    	    align-items: center;
+    	    justify-content: center;
+    	    font-size: 12px;
+	}
+	.minimize-btn:hover {
+    	    background: #45a049;
+	}       
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #4CAF50;
+            color: white;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .file-label {
+            padding: 8px 15px;
+            background: #2196F3;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .file-label:hover {
+            background: #0b7dda;
+        }
+        
+        .zoom-controls {
+            margin: 5px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .zoom-controls button {
+            padding: 5px 10px;
+            min-width: 30px;
+        }
+        
+        .page-info {
+            margin: 5px;
+            padding: 8px 15px;
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .sync-status {
+            margin: 5px;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 4px;
+        }
+        
+        .sync-status.off {
+            background: #f44336;
+        }
+        
+        .sync-scroll-container {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 100%;
+            width: 13px;
+            background: #f0f0f0;
+            cursor: ns-resize;
+            z-index: 50;
+        }
+        
+        .sync-scroll-bar {
+            position: absolute;
+            width: 100%;
+            height: 30px;
+            background: #4CAF50;
+            border-radius: 6px;
+            cursor: grab;
+            transition: background 0.2s;
+        }
+        
+        .sync-scroll-bar:active {
+            cursor: grabbing;
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="pdf-container" id="left-container">
+            <div class="pdf-viewer" id="left-viewer"></div>
+            <div class="loading" id="left-loading">Loading left PDF...</div>
+        </div>
+        <div class="sync-scroll-container" id="sync-scroll-container">
+            <div class="sync-scroll-bar" id="sync-scroll-bar"></div>
+        </div>
+        <div class="pdf-container" id="right-container">
+            <div class="pdf-viewer" id="right-viewer"></div>
+            <div class="loading" id="right-loading">Loading right PDF...</div>
+        </div>
+    </div>
+    
+    <div class="controls">
+	<button class="minimize-btn" id="minimize-btn">▼</button>
+        <input type="file" id="left-file" class="file-input" accept=".pdf">
+        <label for="left-file" class="file-label">Choose Left PDF</label>
+        
+        <input type="file" id="right-file" class="file-input" accept=".pdf">
+        <label for="right-file" class="file-label">Choose Right PDF</label>
+        
+        <div class="zoom-controls">
+            <button id="zoom-out">-</button>
+            <button id="zoom-reset">100%</button>
+            <button id="zoom-in">+</button>
+        </div>
+        <div class="page-info" id="page-info">
+            <span>Left: </span>
+            <input type="number" id="left-page-input" min="1" class="page-input">
+            <span id="left-total-pages">/--</span>
+            <span> | Right: </span>
+            <input type="number" id="right-page-input" min="1" class="page-input">
+            <span id="right-total-pages">/--</span>
+        </div>
+        
+        <button id="sync-toggle">Toggle Sync</button>
+        <div class="sync-status" id="sync-status">Sync: ON</div>
+    </div>
+
+    <script>
+        // Set PDF.js worker path
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.worker.min.js';
+        
+        // Global variables
+        let leftPdf = null;
+        let rightPdf = null;
+        let isSyncing = true;
+        let zoomLevel = 1.0;
+        let lastSyncTime = 0;
+        let isDraggingSyncBar = false;
+        let syncScrollMax = 100;
+        
+        // Scroll control variables
+        let syncingInProgress = false;
+        let scrollDebounceTimeout = null;
+        let programmaticScrollSide = null;
+        
+        // Page position tracking
+        let leftPageRanges = [];
+        let rightPageRanges = [];
+        
+        // DOM elements
+        const leftContainer = document.getElementById('left-container');
+        const rightContainer = document.getElementById('right-container');
+	const leftPageInput = document.getElementById('left-page-input');
+	const rightPageInput = document.getElementById('right-page-input');
+	const leftTotalPages = document.getElementById('left-total-pages');
+	const rightTotalPages = document.getElementById('right-total-pages');
+        const leftViewer = document.getElementById('left-viewer');
+        const rightViewer = document.getElementById('right-viewer');
+        const leftLoading = document.getElementById('left-loading');
+        const rightLoading = document.getElementById('right-loading');
+        const leftFileInput = document.getElementById('left-file');
+        const rightFileInput = document.getElementById('right-file');
+        const syncToggle = document.getElementById('sync-toggle');
+        const syncStatus = document.getElementById('sync-status');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomResetBtn = document.getElementById('zoom-reset');
+        const pageInfo = document.getElementById('page-info');
+        const syncScrollContainer = document.getElementById('sync-scroll-container');
+        const syncScrollBar = document.getElementById('sync-scroll-bar');
+	const minimizeBtn = document.getElementById('minimize-btn');
+        
+        // Initialize
+        function init() {
+            // Set up optimized scroll listeners
+            const scrollOptions = { passive: true };
+            leftContainer.addEventListener('scroll', handleScroll.bind(null, 'left'), scrollOptions);
+            rightContainer.addEventListener('scroll', handleScroll.bind(null, 'right'), scrollOptions);
+	    
+            
+            // Set up other event listeners
+            leftFileInput.addEventListener('change', handleLeftFileSelect);
+            rightFileInput.addEventListener('change', handleRightFileSelect);
+            syncToggle.addEventListener('click', toggleSync);
+            zoomOutBtn.addEventListener('click', () => adjustZoom(-0.1));
+            zoomInBtn.addEventListener('click', () => adjustZoom(0.1));
+            zoomResetBtn.addEventListener('click', () => setZoom(1.0));
+	    minimizeBtn.addEventListener('click', toggleControls);
+	    
+	
+            // Add these inside the init() function, with other event listeners
+            leftPageInput.addEventListener('change', (e) => {
+            	if (leftPdf && leftPageRanges.length > 0) {
+                    const targetPage = Math.min(Math.max(1, parseInt(e.target.value) || 1), leftPdf.numPages);
+                    const { start } = leftPageRanges[targetPage - 1];
+                    leftContainer.scrollTo({ top: start, behavior: 'smooth' });
+                    leftPageInput.value = targetPage;
+                }
+            });
+
+            rightPageInput.addEventListener('change', (e) => {
+                if (rightPdf && rightPageRanges.length > 0) {
+                    const targetPage = Math.min(Math.max(1, parseInt(e.target.value) || 1), rightPdf.numPages);
+                    const { start } = rightPageRanges[targetPage - 1];
+                    rightContainer.scrollTo({ top: start, behavior: 'smooth' });
+                    rightPageInput.value = targetPage;
+                }
+            });
+
+            leftPageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    leftPageInput.blur();
+                }
+            });
+
+            rightPageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    rightPageInput.blur();
+                }
+            });
+
+            // Sync scroll bar events
+            syncScrollContainer.addEventListener('mousedown', startDragSyncBar);
+            document.addEventListener('mousemove', handleSyncBarDrag);
+            document.addEventListener('mouseup', stopDragSyncBar);
+            syncScrollContainer.addEventListener('wheel', handleSyncBarWheel, { passive: false });
+            
+            // Handle window resize
+            window.addEventListener('resize', function() {
+                calculatePagePositions('left');
+                calculatePagePositions('right');
+                updateSyncBarPosition();
+            });
+            
+            // Initialize with default zoom
+            setZoom(zoomLevel);
+        }
+        
+        // Handle left PDF file selection
+        function handleLeftFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                loadPdf('left', fileURL);
+            }
+        }
+        
+        // Handle right PDF file selection
+        function handleRightFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                loadPdf('right', fileURL);
+            }
+        }
+        
+        
+	
+        function toggleControls() {
+            const controls = document.querySelector('.controls');
+            const isMinimized = controls.classList.contains('minimized');
+    
+            if (isMinimized) {
+            	controls.classList.remove('minimized');
+            	minimizeBtn.textContent = '▼';
+            } else {
+            	controls.classList.add('minimized');
+            	minimizeBtn.textContent = '▲';
+            }
+        }
+
+
+
+
+
+	// Load PDF function
+        function loadPdf(side, url) {
+            const loadingElement = side === 'left' ? leftLoading : rightLoading;
+            const viewerElement = side === 'left' ? leftViewer : rightViewer;
+            
+            loadingElement.textContent = `Loading ${side} PDF...`;
+            viewerElement.innerHTML = '';
+            
+            if (side === 'left') {
+                leftPageRanges = [];
+            } else {
+                rightPageRanges = [];
+            }
+            
+            pdfjsLib.getDocument(url).promise.then(function(pdf) {
+                if (side === 'left') {
+                    leftPdf = pdf;
+                } else {
+                    rightPdf = pdf;
+                }
+                
+                loadingElement.textContent = '';
+                renderPdf(pdf, viewerElement, side).then(() => {
+                    calculatePagePositions(side);
+                    updatePageInfo();
+                    syncScrollMax = Math.max(leftPdf?.numPages || 0, rightPdf?.numPages || 0);
+                    updateSyncBarPosition();
+                });
+            }).catch(function(error) {
+                loadingElement.textContent = `Error loading ${side} PDF: ${error.message}`;
+                console.error(`Error loading ${side} PDF:`, error);
+            });
+        }
+        
+        
+	
+	// Render PDF pages
+        async function renderPdf(pdf, container, side) {
+            const containerWidth = (side === 'left' ? leftContainer : rightContainer).clientWidth - 40;
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                try {
+                    const page = await pdf.getPage(i);
+                    const originalViewport = page.getViewport({ scale: 1.0 });
+                    const scaleFactor = containerWidth / originalViewport.width;
+                    const finalScaleFactor = scaleFactor * zoomLevel;
+                    const viewport = page.getViewport({ scale: finalScaleFactor });
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    canvas.className = 'pdf-page';
+                    canvas.dataset.pageNumber = i;
+                    canvas.dataset.side = side;
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    
+                    await page.render(renderContext).promise;
+                    
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.style.position = 'relative';
+                    pageWrapper.style.width = '100%';
+                    pageWrapper.style.textAlign = 'center';
+                    pageWrapper.style.marginBottom = '20px';
+                    pageWrapper.dataset.pageNumber = i;
+                    pageWrapper.className = 'page-wrapper';
+                    
+                    const pageNum = document.createElement('div');
+                    pageNum.textContent = `Page ${i}`;
+                    pageNum.style.position = 'absolute';
+                    pageNum.style.bottom = '5px';
+                    pageNum.style.right = '5px';
+                    pageNum.style.backgroundColor = 'rgba(0,0,0,0.5)';
+                    pageNum.style.color = 'white';
+                    pageNum.style.padding = '3px 6px';
+                    pageNum.style.borderRadius = '3px';
+                    pageNum.style.fontSize = '12px';
+                    
+                    pageWrapper.appendChild(canvas);
+                    pageWrapper.appendChild(pageNum);
+                    container.appendChild(pageWrapper);
+                    
+                } catch (error) {
+                    console.error(`Error rendering page ${i}:`, error);
+                    
+                    const errorDiv = document.createElement('div');
+                    errorDiv.textContent = `Error rendering page ${i}: ${error.message}`;
+                    errorDiv.style.color = 'red';
+                    errorDiv.style.padding = '20px';
+                    errorDiv.style.margin = '10px';
+                    errorDiv.style.border = '1px solid red';
+                    errorDiv.className = 'page-wrapper';
+                    errorDiv.dataset.pageNumber = i;
+                    container.appendChild(errorDiv);
+                }
+            }
+        }
+        
+        // Enhanced page position calculation
+        function calculatePagePositions(side) {
+            const container = side === 'left' ? leftContainer : rightContainer;
+            const viewer = side === 'left' ? leftViewer : rightViewer;
+            const pageRanges = side === 'left' ? leftPageRanges : rightPageRanges;
+            
+            pageRanges.length = 0;
+            const pages = viewer.querySelectorAll('.page-wrapper');
+            
+            let cumulativeHeight = 0;
+            pages.forEach((page, index) => {
+                const start = cumulativeHeight;
+                cumulativeHeight += page.offsetHeight + 20; // Add margin
+                pageRanges[index] = { start, end: cumulativeHeight };
+            });
+        }
+        
+        // Precise page detection using binary search
+        function findCurrentPage(scrollPos, pageRanges) {
+            if (!pageRanges || pageRanges.length === 0) return 1;
+            
+            let low = 0;
+            let high = pageRanges.length - 1;
+            
+            while (low <= high) {
+                const mid = (low + high) >>> 1;
+                const { start, end } = pageRanges[mid];
+                
+                if (scrollPos >= start && scrollPos < end) {
+                    return mid + 1;
+                } else if (scrollPos < start) {
+                    high = mid - 1;
+                } else {
+                    low = mid + 1;
+                }
+            }
+            
+            return Math.min(pageRanges.length, Math.max(1, low));
+        }
+        
+        // Enhanced scroll handler
+        function handleScroll(scrolledSide) {
+            if (syncingInProgress || programmaticScrollSide === scrolledSide) return;
+
+            clearTimeout(scrollDebounceTimeout);
+            scrollDebounceTimeout = setTimeout(() => {
+                updateSyncBarPosition();
+                
+                const container = scrolledSide === 'left' ? leftContainer : rightContainer;
+                const pageRanges = scrolledSide === 'left' ? leftPageRanges : rightPageRanges;
+                const currentPage = findCurrentPage(container.scrollTop, pageRanges);
+
+                if (isSyncing) {
+                    const now = Date.now();
+                    if (now - lastSyncTime >= 2000) {
+                        syncOtherPdf(scrolledSide, currentPage);
+                        lastSyncTime = now;
+                    }
+                }
+                
+                updatePageInfo();
+            }, 100);
+        }
+        
+        // Improved synchronization with loop prevention
+        function syncOtherPdf(sourceSide, sourcePage) {
+            if (!leftPdf || !rightPdf || syncingInProgress) return;
+
+            syncingInProgress = true;
+            const targetSide = sourceSide === 'left' ? 'right' : 'left';
+            
+            try {
+                // Calculate proportional position
+                const sourceTotal = sourceSide === 'left' ? leftPdf.numPages : rightPdf.numPages;
+                const targetTotal = targetSide === 'left' ? leftPdf.numPages : rightPdf.numPages;
+                const pagePercentage = Math.min(1, Math.max(0, (sourcePage - 1) / (sourceTotal - 1 || 1)));
+                const targetPage = Math.round(1 + pagePercentage * (targetTotal - 1));
+                
+                // Get target scroll position
+                const targetRanges = targetSide === 'left' ? leftPageRanges : rightPageRanges;
+                const { start } = targetRanges[Math.min(targetPage, targetRanges.length) - 1] || { start: 0 };
+
+                // Perform programmatic scroll
+                programmaticScrollSide = targetSide;
+                const targetContainer = targetSide === 'left' ? leftContainer : rightContainer;
+                targetContainer.scrollTo({ top: start, behavior: 'smooth' });
+                
+                // Update UI after scroll
+                requestAnimationFrame(() => {
+                    syncingInProgress = false;
+                    updatePageInfo();
+                    updateSyncBarPosition();
+                });
+            } catch (error) {
+                console.error('Sync error:', error);
+                syncingInProgress = false;
+            }
+
+            // Reset programmatic flag after scroll completes
+            setTimeout(() => {
+                programmaticScrollSide = null;
+            }, 500);
+        }
+        
+        // Update page info display
+        function updatePageInfo() {
+            let leftPage = 1;
+            let rightPage = 1;
+            
+            if (leftPageRanges.length > 0) {
+                leftPage = findCurrentPage(leftContainer.scrollTop, leftPageRanges);
+            }
+            
+            if (rightPageRanges.length > 0) {
+                rightPage = findCurrentPage(rightContainer.scrollTop, rightPageRanges);
+            }
+            
+            // Update input values without triggering events
+            if (document.activeElement !== leftPageInput) {
+                leftPageInput.value = leftPageRanges.length > 0 ? leftPage : '';
+            }
+            if (document.activeElement !== rightPageInput) {
+                rightPageInput.value = rightPageRanges.length > 0 ? rightPage : '';
+            }
+            
+            // Update total page displays
+            if (leftPdf) {
+                leftTotalPages.textContent = `/${leftPdf.numPages}`;
+                leftPageInput.min = 1;
+                leftPageInput.max = leftPdf.numPages;
+            } else {
+                leftTotalPages.textContent = '/--';
+            }
+            
+            if (rightPdf) {
+                rightTotalPages.textContent = `/${rightPdf.numPages}`;
+                rightPageInput.min = 1;
+                rightPageInput.max = rightPdf.numPages;
+            } else {
+                rightTotalPages.textContent = '/--';
+            }
+            
+            // Fallback text display
+            if (!leftPdf && !rightPdf) {
+                pageInfo.textContent = 'No PDFs loaded';
+            }
+        }
+
+        
+        // Toggle sync between the two viewers
+        function toggleSync() {
+            isSyncing = !isSyncing;
+            syncStatus.textContent = `Sync: ${isSyncing ? 'ON' : 'OFF'}`;
+            syncStatus.className = isSyncing ? 'sync-status' : 'sync-status off';
+        }
+        
+        // Zoom functionality
+        function adjustZoom(amount) {
+            setZoom(zoomLevel + amount);
+        }
+        
+        function setZoom(level) {
+            // Constrain zoom level between 0.5 and 3.0
+            zoomLevel = Math.min(3.0, Math.max(0.5, level));
+            
+            // Re-render both PDFs if they exist
+            if (leftPdf) {
+                leftViewer.innerHTML = '';
+                renderPdf(leftPdf, leftViewer, 'left').then(() => {
+                    calculatePagePositions('left');
+                    updateSyncBarPosition();
+                });
+            }
+            
+            if (rightPdf) {
+                rightViewer.innerHTML = '';
+                renderPdf(rightPdf, rightViewer, 'right').then(() => {
+                    calculatePagePositions('right');
+                    updateSyncBarPosition();
+                });
+            }
+        }
+        
+        // Sync scroll bar functionality
+        function startDragSyncBar(e) {
+            isDraggingSyncBar = true;
+            syncScrollBar.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+        
+        function handleSyncBarDrag(e) {
+            if (!isDraggingSyncBar) return;
+            
+            const containerRect = syncScrollContainer.getBoundingClientRect();
+            const newTop = e.clientY - containerRect.top - (syncScrollBar.offsetHeight / 2);
+            const maxTop = containerRect.height - syncScrollBar.offsetHeight;
+            
+            const normalizedPosition = Math.min(maxTop, Math.max(0, newTop)) / maxTop;
+            syncScrollBar.style.top = `${normalizedPosition * maxTop}px`;
+            
+            // Calculate page based on position
+            const targetPage = Math.round(1 + normalizedPosition * (syncScrollMax - 1));
+            
+            // Sync both viewers
+            if (leftPdf && leftPageRanges.length > 0) {
+                const leftPage = Math.min(targetPage, leftPdf.numPages);
+                const { start } = leftPageRanges[leftPage - 1] || { start: 0 };
+                programmaticScrollSide = 'left';
+                leftContainer.scrollTo({ top: start, behavior: 'auto' });
+            }
+            
+            if (rightPdf && rightPageRanges.length > 0) {
+                const rightPage = Math.min(targetPage, rightPdf.numPages);
+                const { start } = rightPageRanges[rightPage - 1] || { start: 0 };
+                programmaticScrollSide = 'right';
+                rightContainer.scrollTo({ top: start, behavior: 'auto' });
+            }
+            
+            // Reset programmatic flag
+            setTimeout(() => {
+                programmaticScrollSide = null;
+            }, 100);
+            
+            updatePageInfo();
+        }
+        
+        function stopDragSyncBar() {
+            isDraggingSyncBar = false;
+            syncScrollBar.style.cursor = 'grab';
+        }
+        
+        function handleSyncBarWheel(e) {
+            e.preventDefault();
+            
+            // Get current position
+            const containerRect = syncScrollContainer.getBoundingClientRect();
+            const maxTop = containerRect.height - syncScrollBar.offsetHeight;
+            const currentTop = parseFloat(syncScrollBar.style.top || '0');
+            
+            // Adjust position based on wheel delta
+            const newTop = Math.min(maxTop, Math.max(0, currentTop - e.deltaY));
+            syncScrollBar.style.top = `${newTop}px`;
+            
+            // Calculate page based on position
+            const normalizedPosition = newTop / maxTop;
+            const targetPage = Math.round(1 + normalizedPosition * (syncScrollMax - 1));
+            
+            // Sync both viewers
+            if (leftPdf && leftPageRanges.length > 0) {
+                const leftPage = Math.min(targetPage, leftPdf.numPages);
+                const { start } = leftPageRanges[leftPage - 1] || { start: 0 };
+                programmaticScrollSide = 'left';
+                leftContainer.scrollTo({ top: start, behavior: 'auto' });
+            }
+            
+            if (rightPdf && rightPageRanges.length > 0) {
+                const rightPage = Math.min(targetPage, rightPdf.numPages);
+                const { start } = rightPageRanges[rightPage - 1] || { start: 0 };
+                programmaticScrollSide = 'right';
+                rightContainer.scrollTo({ top: start, behavior: 'auto' });
+            }
+            
+            // Reset programmatic flag
+            setTimeout(() => {
+                programmaticScrollSide = null;
+            }, 100);
+            
+            updatePageInfo();
+        }
+        
+        function updateSyncBarPosition() {
+            if (!leftPdf && !rightPdf) return;
+            
+            // Determine which PDF to use for reference
+            const referencePdf = leftPdf || rightPdf;
+            const referenceRanges = leftPdf ? leftPageRanges : rightPageRanges;
+            const referenceContainer = leftPdf ? leftContainer : rightContainer;
+            
+            if (referenceRanges.length === 0) return;
+            
+            // Calculate current page position
+            const currentPage = findCurrentPage(referenceContainer.scrollTop, referenceRanges);
+            const pagePercentage = (currentPage - 1) / (referencePdf.numPages - 1 || 1);
+            
+            // Update sync bar position
+            const containerHeight = syncScrollContainer.offsetHeight;
+            const barHeight = syncScrollBar.offsetHeight;
+            const maxTop = containerHeight - barHeight;
+            const newTop = pagePercentage * maxTop;
+            
+            syncScrollBar.style.top = `${newTop}px`;
+        }
+        
+        // Initialize the application
+        window.onload = init;
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
