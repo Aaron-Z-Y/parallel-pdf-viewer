@@ -1,39 +1,51 @@
-# parallel-pdf-viewer
-An web based project display 2 PDFs in a split window with synchronized scrolling
-
-This is a web-based tool for comparing two PDF documents side-by-side with synchronized page-by-page scrolling.
-
+# Parallel PDF Viewer
+A web-based tool for comparing two PDF documents side-by-side with multiple navigation options.
 ## Features
-
-- View two PDFs simultaneously in a split-screen interface
-- Synchronized page-by-page scrolling (1:1 page correlation)
-- High-resolution rendering with zoom controls
-- Toggle synchronization on/off
-- Responsive design works on desktop and tablets
-- No server required - works entirely in the browser
-
+- **Dual PDF Viewing**: Display two PDFs simultaneously in split-screen
+- **Multiple Navigation Modes**:
+  - Synchronized scrolling (1:1 page correlation)
+  - Direct page number input with validation
+  - Keyboard navigation (Enter to jump)
+- **Interactive Controls**:
+  - Real-time page number display with input fields
+  - Toggle synchronization on/off
+  - Zoom controls (+/- buttons)
+- **Smart Rendering**:
+  - High-resolution rendering with PDF.js
+  - Progressive loading for better performance
+  - Automatic page range calculation
+- **Responsive Design**: Works on desktop and tablets
 ## How to Use
-
 1. Open the https://github.com/Aaron-Z-Y/parallel-pdf-viewer
-2. Click "Choose Left PDF" and "Choose Right PDF" to upload documents
-3. Scroll using mouse wheel/trackpad - both PDFs will advance pages together
-4. Use the zoom buttons (+/-) to adjust viewing resolution
-5. Toggle sync button to enable/disable synchronized scrolling
-
-## Technical Details
-
-- Built with PDF.js (Mozilla's PDF rendering library)
-- Pure client-side JavaScript - no server processing
-- Page-based synchronization algorithm
-- High-DPI display support
-
+2. Upload PDFs using "Choose Left PDF" and "Choose Right PDF" buttons
+3. Navigate using:
+   - Scroll wheel/trackpad for page-by-page viewing
+   - Type page numbers in input fields + press Enter
+   - Arrow keys while focused on input fields
+4. Adjust view with:
+   - Zoom buttons (+/-) for resolution changes
+   - Sync toggle to enable/disable coordinated scrolling
+   - Window resize for layout adjustments
+## Technical Enhancements
+- **Page Tracking System**:
+  - Real-time scroll position monitoring
+  - Input-field synchronized navigation
+  - Cross-browser input validation
+- **Performance Optimizations**:
+  - Debounced scroll events
+  - Cached page positions
+  - Smart re-rendering
+- **UI Features**:
+  - Input constraints (min/max page numbers)
+  - Total page counter updates
+  - Active element detection for input sync
 ## Installation
-
-No installation needed for end users - just open the HTML file in a modern browser.
-
-For developers:
-
+End users: Simply open `index.html` in a modern browser.
+Developers:
 ```bash
 git clone https://github.com/Aaron-Z-Y/parallel-pdf-viewer.git
 cd parallel-pdf-viewer
-# Open index.html in your browser
+# Start local server (optional)
+python -m http.server 8000
+# Open http://localhost:8000 in browser
+
