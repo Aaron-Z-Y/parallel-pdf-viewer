@@ -40,7 +40,7 @@ A web-based tool for comparing two PDF documents side-by-side with multiple navi
   - Total page counter updates
   - Active element detection for input sync
 ## Installation
-End users: Simply open `index.html` in a modern browser.
+End users: Simply open `Parallel PDF Viewer.html` in a modern browser.
 Developers:
 ```bash
 git clone https://github.com/Aaron-Z-Y/parallel-pdf-viewer.git
